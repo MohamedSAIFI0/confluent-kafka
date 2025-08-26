@@ -1,0 +1,120 @@
+Complete Kafka Docker Setup Guide
+Step 1: Create Docker Compose File
+Create a file named docker-compose.yml with this content:
+yamlversion: '3.8'
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: z1IhO92KQeO7JkTnsPq4PA
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--list", "--bootstrap-server", "kafka:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+Step 2: Start Kafka Container
+bash# Start the container
+docker-compose up -d
+
+# Wait for Kafka to be ready (30-60 seconds)
+# Check if container is running
+docker ps
+Step 3: Verify Kafka is Ready
+bash# Check container logs to ensure Kafka started successfully
+docker logs kafka
+
+# You should see something like "Kafka Server started" at the end
+Step 4: Access Kafka Container
+bash# Exec into the Kafka container
+docker exec -it kafka bash
+Step 5: Create Topic
+bash# Inside the container, create a topic
+kafka-topics --create --topic test-topic --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1
+
+# Verify topic was created
+kafka-topics --list --bootstrap-server kafka:9092
+
+# Check topic details
+kafka-topics --describe --topic test-topic --bootstrap-server kafka:9092
+Step 6: Start Consumer (Terminal 1)
+Important: Start the consumer FIRST, before the producer
+bash# In the same container terminal, start consumer with a consumer group
+kafka-console-consumer --topic test-topic --bootstrap-server kafka:9092 --from-beginning --group test-group
+
+# You should see a message like: "Processed a total of 0 messages"
+# The consumer will wait for messages
+Step 7: Start Producer (Terminal 2)
+Open a NEW terminal window/tab and run:
+bash# Exec into the same container from the new terminal
+docker exec -it kafka bash
+
+# Start the producer
+kafka-console-producer --topic test-topic --bootstrap-server kafka:9092
+
+# You'll see a prompt like: >
+Step 8: Test Message Flow
+
+In Terminal 2 (Producer): Type messages and press Enter after each:
+> Hello World
+> This is message 2
+> Testing Kafka
+
+In Terminal 1 (Consumer): You should immediately see:
+Hello World
+This is message 2
+Testing Kafka
+
+
+Step 9: Verify Everything Works
+bash# In a third terminal (optional verification)
+docker exec -it kafka bash
+
+# Check consumer group status
+kafka-consumer-groups --bootstrap-server kafka:9092 --group test-group --describe
+
+# This shows partition assignments and offsets
+Troubleshooting
+If messages don't appear:
+
+Check container is healthy:
+bashdocker logs kafka
+
+Restart and try again:
+bashdocker-compose down
+docker-compose up -d
+# Wait 60 seconds then retry from Step 4
+
+Use different topic name:
+bashkafka-topics --create --topic debug-topic --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1
+
+# Consumer
+kafka-console-consumer --topic debug-topic --bootstrap-server kafka:9092 --from-beginning --group debug-group
+
+# Producer  
+kafka-console-producer --topic debug-topic --bootstrap-server kafka:9092
+
+
+Key Points for Success:
+
+✅ Always start consumer BEFORE producer
+✅ Use --from-beginning flag
+✅ Use a consumer group (--group flag)
+✅ Wait for consumer to show "Processed a total of 0 messages"
+✅ Both consumer and producer use same bootstrap-server: kafka:9092
