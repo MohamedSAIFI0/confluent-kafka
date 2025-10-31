@@ -1,7 +1,32 @@
-Complete Kafka Docker Setup Guide
-Step 1: Create Docker Compose File
-Create a file named docker-compose.yml with this content:
-yamlversion: '3.8'
+# Kafka Docker Setup Guide
+
+A complete guide for setting up Apache Kafka using Docker Compose with KRaft mode (no Zookeeper required).
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Working with Topics](#working-with-topics)
+- [Testing Message Flow](#testing-message-flow)
+- [Verification](#verification)
+- [Troubleshooting](#troubleshooting)
+- [Key Success Points](#key-success-points)
+- [Connection Details](#connection-details)
+- [Cleanup](#cleanup)
+- [Architecture Notes](#architecture-notes)
+
+## Prerequisites
+
+- Docker
+- Docker Compose
+
+## Quick Start
+
+### 1. Create Docker Compose File
+
+Create a file named `docker-compose.yml`:
+```yaml
+version: '3.8'
 services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
@@ -29,92 +54,173 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-Step 2: Start Kafka Container
-bash# Start the container
+```
+
+### 2. Start Kafka
+```bash
+# Start the container
 docker-compose up -d
 
-# Wait for Kafka to be ready (30-60 seconds)
 # Check if container is running
 docker ps
-Step 3: Verify Kafka is Ready
-bash# Check container logs to ensure Kafka started successfully
+
+# Check logs to ensure Kafka started successfully
 docker logs kafka
+```
 
-# You should see something like "Kafka Server started" at the end
-Step 4: Access Kafka Container
-bash# Exec into the Kafka container
+Wait 30-60 seconds for Kafka to be fully ready. Look for "Kafka Server started" in the logs.
+
+### 3. Access Kafka Container
+```bash
 docker exec -it kafka bash
-Step 5: Create Topic
-bash# Inside the container, create a topic
-kafka-topics --create --topic test-topic --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1
+```
 
-# Verify topic was created
+## Working with Topics
+
+### Create a Topic
+```bash
+# Create a new topic
+kafka-topics --create \
+  --topic test-topic \
+  --bootstrap-server kafka:9092 \
+  --partitions 1 \
+  --replication-factor 1
+
+# List all topics
 kafka-topics --list --bootstrap-server kafka:9092
 
-# Check topic details
+# Describe topic details
 kafka-topics --describe --topic test-topic --bootstrap-server kafka:9092
-Step 6: Start Consumer (Terminal 1)
-Important: Start the consumer FIRST, before the producer
-bash# In the same container terminal, start consumer with a consumer group
-kafka-console-consumer --topic test-topic --bootstrap-server kafka:9092 --from-beginning --group test-group
+```
 
-# You should see a message like: "Processed a total of 0 messages"
-# The consumer will wait for messages
-Step 7: Start Producer (Terminal 2)
-Open a NEW terminal window/tab and run:
-bash# Exec into the same container from the new terminal
+## Testing Message Flow
+
+### Step 1: Start Consumer (Terminal 1)
+
+**Important:** Always start the consumer BEFORE the producer.
+```bash
+# Inside the Kafka container
+kafka-console-consumer \
+  --topic test-topic \
+  --bootstrap-server kafka:9092 \
+  --from-beginning \
+  --group test-group
+```
+
+You should see: `Processed a total of 0 messages`. The consumer will wait for incoming messages.
+
+### Step 2: Start Producer (Terminal 2)
+
+Open a new terminal and run:
+```bash
+# Access the container
 docker exec -it kafka bash
 
 # Start the producer
-kafka-console-producer --topic test-topic --bootstrap-server kafka:9092
+kafka-console-producer \
+  --topic test-topic \
+  --bootstrap-server kafka:9092
+```
 
-# You'll see a prompt like: >
-Step 8: Test Message Flow
+You'll see a prompt: `>`
 
-In Terminal 2 (Producer): Type messages and press Enter after each:
+### Step 3: Send Messages
+
+In Terminal 2 (Producer), type messages and press Enter:
+```
 > Hello World
 > This is message 2
 > Testing Kafka
+```
 
-In Terminal 1 (Consumer): You should immediately see:
+In Terminal 1 (Consumer), you should immediately see:
+```
 Hello World
 This is message 2
 Testing Kafka
+```
 
+## Verification
 
-Step 9: Verify Everything Works
-bash# In a third terminal (optional verification)
-docker exec -it kafka bash
+Check consumer group status:
+```bash
+kafka-consumer-groups \
+  --bootstrap-server kafka:9092 \
+  --group test-group \
+  --describe
+```
 
-# Check consumer group status
-kafka-consumer-groups --bootstrap-server kafka:9092 --group test-group --describe
+This displays partition assignments and consumer offsets.
 
-# This shows partition assignments and offsets
-Troubleshooting
-If messages don't appear:
+## Troubleshooting
 
-Check container is healthy:
-bashdocker logs kafka
+### Messages Not Appearing
 
-Restart and try again:
-bashdocker-compose down
-docker-compose up -d
-# Wait 60 seconds then retry from Step 4
+1. **Check container health:**
+```bash
+   docker logs kafka
+```
 
-Use different topic name:
-bashkafka-topics --create --topic debug-topic --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1
+2. **Restart the container:**
+```bash
+   docker-compose down
+   docker-compose up -d
+   # Wait 60 seconds, then retry from Step 3
+```
 
-# Consumer
-kafka-console-consumer --topic debug-topic --bootstrap-server kafka:9092 --from-beginning --group debug-group
+3. **Try a different topic:**
+```bash
+   # Create new debug topic
+   kafka-topics --create \
+     --topic debug-topic \
+     --bootstrap-server kafka:9092 \
+     --partitions 1 \
+     --replication-factor 1
 
-# Producer  
-kafka-console-producer --topic debug-topic --bootstrap-server kafka:9092
+   # Start consumer
+   kafka-console-consumer \
+     --topic debug-topic \
+     --bootstrap-server kafka:9092 \
+     --from-beginning \
+     --group debug-group
 
+   # Start producer (in another terminal)
+   kafka-console-producer \
+     --topic debug-topic \
+     --bootstrap-server kafka:9092
+```
 
-Key Points for Success:
+## Key Success Points
 
-✅ Always start consumer BEFORE producer
-✅ Use --from-beginning flag
-✅ Use a consumer group (--group flag)
-✅ Wait for consumer to show "Processed a total of 0 messages"
-✅ Both consumer and producer use same bootstrap-server: kafka:9092
+- ✅ Always start consumer BEFORE producer
+- ✅ Use `--from-beginning` flag on consumer
+- ✅ Use a consumer group with `--group` flag
+- ✅ Wait for consumer to show "Processed a total of 0 messages"
+- ✅ Both consumer and producer must use same `bootstrap-server: kafka:9092`
+- ✅ Allow 30-60 seconds for Kafka to fully start
+
+## Connection Details
+
+- **Internal (container-to-container):** `kafka:9092`
+- **External (host machine):** `localhost:29092`
+
+## Cleanup
+```bash
+# Stop and remove containers
+docker-compose down
+
+# Remove volumes (deletes all data)
+docker-compose down -v
+```
+
+## Architecture Notes
+
+This setup uses **KRaft mode** (Kafka Raft), which eliminates the need for Zookeeper. The Kafka broker also acts as its own controller, simplifying the deployment for development and testing environments.
+
+## License
+
+[Your License Here]
+
+## Contributing
+
+[Your Contributing Guidelines Here]
